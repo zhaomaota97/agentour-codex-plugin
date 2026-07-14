@@ -29,16 +29,16 @@ class PluginTests(unittest.TestCase):
         files = {
             "README.md": "# Demo\n",
             "RELEASE.md": "# 0.1.0\n",
-            "tests/smoke.yaml": "cases: []\n",
-            "payload/package.json": "{}\n",
+            "tests/smoke.yaml": 'schema_version: 1\ncases:\n  - send: "x"\n    expect_contains: "ok"\n',
+            "payload/package.json": '{"engines":{"node":">=24"}}\n',
             "payload/pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
             "payload/agent/agent.ts": "const url = process.env.BERTH_URL;\n",
-            "payload/agent/instructions.md": "# Demo\n",
+            "payload/agent/instructions.md": "# Demo\n缺少信息时调用 ask_question。\n",
             "payload/agent/sandbox/sandbox.ts": "export default {};\n",
         }
         manifest = {
             "id": "demo", "name": "Demo", "version": "0.1.0", "runtime": "eve",
-            "capabilities": ["review"], "description": "Demo", "pricing": {"model": "per_run", "amount_cents": 5},
+            "capabilities": ["review"], "description": "Demo", "pricing": {"model": "per_run", "amount_credits": 5},
             "runtime_ui": {
                 "startup_message": "正在启动审查助手…",
                 "default_working_message": "正在分析内容…",
@@ -80,10 +80,23 @@ class PluginTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             package = pathlib.Path(temp) / "demo"
             self.make_package(package)
-            payload = api.package_payload(package)
+            payload, stats = api.package_payload(package)
             self.assertEqual(payload[:2], b"\x1f\x8b")
+            self.assertGreater(stats["files"], 0)
             with tarfile.open(fileobj=__import__("io").BytesIO(payload), mode="r:gz") as archive:
                 self.assertIn("demo/berth.json", archive.getnames())
+
+    def test_package_tarball_excludes_generated_dependencies(self):
+        api = load_api()
+        with tempfile.TemporaryDirectory() as temp:
+            package = pathlib.Path(temp) / "demo"
+            self.make_package(package)
+            generated = package / "payload/node_modules/pkg/index.js"
+            generated.parent.mkdir(parents=True)
+            generated.write_text("generated")
+            payload, _ = api.package_payload(package)
+            with tarfile.open(fileobj=__import__("io").BytesIO(payload), mode="r:gz") as archive:
+                self.assertFalse(any("node_modules" in name for name in archive.getnames()))
 
     def test_valid_package(self):
         with tempfile.TemporaryDirectory() as temp:

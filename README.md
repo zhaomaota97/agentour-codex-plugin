@@ -23,13 +23,15 @@ The Plugin enforces this sequence:
 
 1. Choose **本地服** (`http://127.0.0.1:8600`) or **比赛服** (`http://61.29.254.146`).
 2. Enter a `bt_` developer token; the Plugin validates it with `GET /v1/dev/me` and asks again if invalid.
-3. Fetch enabled models from that platform's `GET /v1/models`.
+3. Fetch models from that platform's `GET /v1/models`, probe every model, and remove unavailable models before selection.
 4. Choose whether to reconstruct an existing Agent or invent a new one.
 5. Complete a one-question-per-turn brainstorm and grill-me interview.
 6. Generate Package(s), validate, repair, and verify fidelity.
 7. Choose private or public upload, then publish and follow the job.
 
 The token is never written to files or reports.
+
+At workflow startup the Plugin checks the latest GitHub Marketplace version. If a newer version exists it runs the Codex Plugin installer automatically, then asks you to start a new Thread so Codex loads the new code.
 
 ## Multiple source Agents
 

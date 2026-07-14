@@ -7,7 +7,7 @@
   "description": "AGENT_DESCRIPTION",
   "pricing": {
     "model": "per_run",
-    "amount_cents": 10
+    "amount_credits": 10
   },
   "secrets": [],
   "approval_required": [],

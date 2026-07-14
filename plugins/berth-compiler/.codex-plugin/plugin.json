@@ -1,6 +1,6 @@
 {
   "name": "berth-compiler",
-  "version": "0.2.0",
+  "version": "0.4.0+codex.20260714121022",
   "description": "Automatically interview, create or reconstruct, validate, fidelity-test, and publish Berth Agents with exactly one user decision per turn.",
   "author": {
     "name": "Berth Platform",
@@ -10,7 +10,13 @@
   "homepage": "https://github.com/zhaomaota97/berth-codex-plugin#readme",
   "repository": "https://github.com/zhaomaota97/berth-codex-plugin",
   "license": "MIT",
-  "keywords": ["agent", "berth", "compiler", "migration", "publishing"],
+  "keywords": [
+    "agent",
+    "berth",
+    "compiler",
+    "migration",
+    "publishing"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Berth Compiler",
@@ -18,12 +24,15 @@
     "longDescription": "Choose the local or competition Berth platform, validate a developer token, then let Codex run a strict one-question-per-turn interview, create or reconstruct Agent packages, validate fidelity, and upload privately or publicly.",
     "developerName": "Berth Platform",
     "category": "Development",
-    "capabilities": ["Interactive", "Write"],
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
     "websiteURL": "https://github.com/zhaomaota97/berth-codex-plugin",
     "defaultPrompt": [
-      "帮我创建并上传一个 Berth Agent。每轮只问我一个问题，其余流程你自动完成。",
-      "把当前项目里的 Agent 高还原度转换并上传到 Berth。每轮只让我做一个选择。",
-      "检查并修好当前 Berth Agent，直到达到可发布状态。"
+      "\u5e2e\u6211\u521b\u5efa\u5e76\u4e0a\u4f20\u4e00\u4e2a Berth Agent\u3002\u6bcf\u8f6e\u53ea\u95ee\u6211\u4e00\u4e2a\u95ee\u9898\uff0c\u5176\u4f59\u6d41\u7a0b\u4f60\u81ea\u52a8\u5b8c\u6210\u3002",
+      "\u628a\u5f53\u524d\u9879\u76ee\u91cc\u7684 Agent \u9ad8\u8fd8\u539f\u5ea6\u8f6c\u6362\u5e76\u4e0a\u4f20\u5230 Berth\u3002\u6bcf\u8f6e\u53ea\u8ba9\u6211\u505a\u4e00\u4e2a\u9009\u62e9\u3002",
+      "\u68c0\u67e5\u5e76\u4fee\u597d\u5f53\u524d Berth Agent\uff0c\u76f4\u5230\u8fbe\u5230\u53ef\u53d1\u5e03\u72b6\u6001\u3002"
     ],
     "brandColor": "#2563EB"
   }

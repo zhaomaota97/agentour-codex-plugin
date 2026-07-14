@@ -1,15 +1,10 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { defineAgent } from "eve";
 
-const berthURL = process.env.BERTH_URL?.replace(/\/$/, "");
-const runtimeKey = process.env.BERTH_RUNTIME_KEY;
-
-if (!berthURL) {
-  throw new Error("BERTH_URL is required; refusing to fall back to localhost");
-}
-if (!runtimeKey) {
-  throw new Error("BERTH_RUNTIME_KEY is required");
-}
+// Runtime injects both values. Build Gate injects BERTH_URL only, so runtime
+// secrets must not be validated at module-import time.
+const berthURL = process.env.BERTH_URL?.replace(/\/$/, "") || "http://berth-build.invalid";
+const runtimeKey = process.env.BERTH_RUNTIME_KEY || "build-only-placeholder";
 
 const provider = createDeepSeek({
   baseURL: `${berthURL}/v1/llm`,
