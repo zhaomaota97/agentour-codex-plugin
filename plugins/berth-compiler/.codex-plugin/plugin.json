@@ -1,6 +1,6 @@
 {
   "name": "berth-compiler",
-  "version": "0.4.0+codex.20260714121022",
+  "version": "0.4.1+codex.20260715030624",
   "description": "Automatically interview, create or reconstruct, validate, fidelity-test, and publish Berth Agents with exactly one user decision per turn.",
   "author": {
     "name": "Berth Platform",

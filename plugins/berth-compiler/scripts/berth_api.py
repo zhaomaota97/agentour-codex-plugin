@@ -26,8 +26,8 @@ DEFAULT_IGNORES = {
     "__pycache__", ".DS_Store",
 }
 DEFAULT_PATTERNS = {"*.log", "*.tmp", "*.swp", ".berth-*.log"}
-PLUGIN_VERSION = "0.4.0"
-LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/zhaomaota97/berth-codex-plugin/master/plugins/berth-compiler/.codex-plugin/plugin.json"
+PLUGIN_VERSION = "0.4.1"
+LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/zhaomaota97/berth-codex-plugin/main/plugins/berth-compiler/.codex-plugin/plugin.json"
 
 
 def base_url(platform: str) -> str:
@@ -146,11 +146,14 @@ def cmd_check_update(args):
     result = {"checked": True, "current": current, "latest": latest,
               "outdated": outdated, "updated": False}
     if outdated and args.auto:
-        completed = subprocess.run(
-            ["codex", "plugin", "add", "berth-compiler@berth-platform"],
+        refresh = subprocess.run(
+            ["codex", "plugin", "marketplace", "upgrade", "berth-platform"],
             text=True, capture_output=True)
-        result["updated"] = completed.returncode == 0
-        if completed.returncode != 0:
+        completed = (subprocess.run(
+            ["codex", "plugin", "add", "berth-compiler@berth-platform"],
+            text=True, capture_output=True) if refresh.returncode == 0 else refresh)
+        result["updated"] = refresh.returncode == 0 and completed.returncode == 0
+        if not result["updated"]:
             result["error"] = (completed.stderr or completed.stdout)[-1000:]
         else:
             result["restart_required"] = True
