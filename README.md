@@ -27,9 +27,14 @@ The Plugin enforces this sequence:
 4. Choose whether to reconstruct an existing Agent or invent a new one.
 5. Complete a one-question-per-turn brainstorm and grill-me interview.
 6. Generate Package(s), validate, repair, and verify fidelity.
-7. Choose private or public upload, then publish and follow the job.
+7. Choose private or public upload, run the remote Build Gate, then publish only after it succeeds.
 
 The token is never written to files or reports.
+
+`remote-build` reports structured Gates and reuses cached Package hashes without consuming a
+new E2B quota. HTTP `429` means the active or daily quota is exhausted and must not be bypassed
+with blind retries. Deterministic failures require a Package repair. Superseded jobs can be
+stopped with `cancel-build <job-id>`.
 
 At workflow startup the Plugin checks the latest GitHub Marketplace version. If a newer version exists it runs the Codex Plugin installer automatically, then asks you to start a new Thread so Codex loads the new code.
 

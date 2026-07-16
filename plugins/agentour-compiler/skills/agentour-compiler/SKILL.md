@@ -170,6 +170,11 @@ python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \
 
 Use the structured `gates` result to repair deterministic failures. Do not retry unchanged content blindly; retry only after a repair or for the single transient retry handled by the platform. Publish only when the remote Build status is `succeeded`.
 
+On HTTP `429`, explain that the active/daily E2B quota is exhausted and wait rather than
+mutating content or looping retries. Cached Build results are valid and consume no new quota.
+Cancel a superseded or user-cancelled job with `cancel-build <job-id>` and confirm its terminal
+status before starting another paid Build.
+
 ```bash
 AGENTOUR_TOKEN="<token>" python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \
   --platform <local|competition> publish-async packages/<agent-id> \

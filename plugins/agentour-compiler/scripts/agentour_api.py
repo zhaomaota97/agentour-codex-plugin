@@ -31,7 +31,7 @@ DEFAULT_IGNORES = {
     "__pycache__", ".DS_Store",
 }
 DEFAULT_PATTERNS = {"*.log", "*.tmp", "*.swp", ".agentour-*.log"}
-PLUGIN_VERSION = "0.6.1"
+PLUGIN_VERSION = "0.7.0"
 LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/Onesyn-ai/agentour-codex-plugin/main/plugins/agentour-compiler/.codex-plugin/plugin.json"
 
 
@@ -305,6 +305,12 @@ def cmd_remote_build(args):
     raise SystemExit(f"Build Job {job_id} timed out")
 
 
+def cmd_cancel_build(args):
+    result = authenticated(args, f"/v1/dev/builds/{urllib.parse.quote(args.job_id, safe='')}/cancel",
+                           method="POST")
+    print(json.dumps(result, ensure_ascii=False), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", choices=PLATFORMS, default="competition")
@@ -335,6 +341,8 @@ def main():
     remote_build.add_argument("--no-wait", action="store_true")
     remote_build.add_argument("--timeout", type=float, default=1800)
     remote_build.add_argument("--poll-interval", type=float, default=2)
+    cancel_build = sub.add_parser("cancel-build")
+    cancel_build.add_argument("job_id")
     for name in ("publish", "publish-async"):
         publish = sub.add_parser(name)
         publish.add_argument("package")
@@ -371,6 +379,8 @@ def main():
         cmd_validate(args)
     elif args.command == "remote-build":
         cmd_remote_build(args)
+    elif args.command == "cancel-build":
+        cmd_cancel_build(args)
     elif args.command == "publish":
         cmd_publish(args, False)
     else:

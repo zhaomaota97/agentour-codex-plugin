@@ -1,6 +1,6 @@
 {
   "name": "agentour-compiler",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Automatically interview, create or reconstruct, validate, fidelity-test, and publish Agentour Agents with exactly one user decision per turn.",
   "author": {
     "name": "Agentour Platform",
