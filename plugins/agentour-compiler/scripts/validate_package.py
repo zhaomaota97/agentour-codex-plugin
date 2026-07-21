@@ -10,6 +10,8 @@ import re
 import subprocess
 import sys
 import time
+import hashlib
+import fnmatch
 
 FORBIDDEN_UI = re.compile(r"\b(load skill|skill loaded|tool call|runtime boot|handler)\b", re.I)
 SECRET_CONTENT = [
@@ -20,6 +22,26 @@ SECRET_CONTENT = [
 ]
 EXCLUDED = {"node_modules", ".output", ".eve", ".workflow-data", ".git", "__pycache__"}
 ALLOWED_SMOKE = {"send", "expect_tool", "expect_contains", "expect_approval", "expect_question"}
+LOCK_EXCLUDES = {"node_modules", ".output", ".eve", ".workflow-data", ".git",
+                 "package.lock", "__pycache__"}
+
+
+def generate_package_lock(root: pathlib.Path) -> dict:
+    hashes = {}
+    for path in sorted(root.rglob("*")):
+        rel = path.relative_to(root)
+        if (not path.is_file() or any(part in LOCK_EXCLUDES for part in rel.parts)
+                or fnmatch.fnmatch(path.name, ".agentour-*.log")):
+            continue
+        hashes[rel.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    tree = hashlib.sha256()
+    for rel, digest in sorted(hashes.items()):
+        tree.update(rel.encode()); tree.update(b"\0"); tree.update(digest.encode()); tree.update(b"\n")
+    lock = {"version": 1, "hash": tree.hexdigest(), "files": hashes,
+            "generated_by": "agentourcore.lockfile/1"}
+    (root / "package.lock").write_text(
+        json.dumps(lock, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return lock
 
 
 def files(root: pathlib.Path):
@@ -63,6 +85,7 @@ def validate_smoke(path: pathlib.Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("package"); args = parser.parse_args()
     started = time.monotonic(); root = pathlib.Path(args.package).resolve()
+    lock = generate_package_lock(root)
     critical: list[str] = []; warnings: list[str] = []; passed: list[str] = []
     required = ["agentour.json", "README.md", "RELEASE.md", "tests/smoke.yaml",
                 "payload/package.json", "payload/pnpm-lock.yaml", "payload/agent/agent.ts",
@@ -124,7 +147,8 @@ def main() -> int:
         if int(version.split(".", 1)[0]) < 24: warnings.append(f"Local Node {version} is too old for Eve; use Node 24")
     except Exception: warnings.append("Node.js not found; local build is unverified")
 
-    if not critical: passed.extend(["Required files and manifest passed", "Upload-scope secret scan passed"])
+    if not critical: passed.extend(["Required files and manifest passed", "Upload-scope secret scan passed",
+                                    f"Generated package.lock {lock['hash'][:16]}"])
     for title, values in (("Critical", critical), ("Warnings", warnings), ("Passed", passed)):
         if values:
             print(title + ":")

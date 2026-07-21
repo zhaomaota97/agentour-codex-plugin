@@ -1,4 +1,4 @@
-import { createDeepSeek } from "@ai-sdk/deepseek";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { defineAgent } from "eve";
 
 const agentourURL = process.env.AGENTOUR_URL?.replace(/\/$/, "");
@@ -10,7 +10,8 @@ if (!runtimeToken) {
   throw new Error("AGENTOUR_RUNTIME_TOKEN is required before the Agent starts");
 }
 
-const provider = createDeepSeek({
+const provider = createOpenAICompatible({
+  name: "agentour",
   baseURL: `${agentourURL}/v1/llm`,
   apiKey: runtimeToken,
 });

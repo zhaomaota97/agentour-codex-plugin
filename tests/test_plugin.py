@@ -65,6 +65,19 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(api.base_url("competition"), "https://agentour.ai")
         self.assertIn("remote-build", (PLUGIN / "scripts/agentour_api.py").read_text())
         self.assertIn("compiler-tasks", (PLUGIN / "scripts/agentour_api.py").read_text())
+        self.assertIn("build-preflight", (PLUGIN / "scripts/agentour_api.py").read_text())
+
+    def test_static_validator_generates_platform_package_lock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            package = pathlib.Path(temp) / "demo"
+            self.make_package(package)
+            result = subprocess.run([
+                sys.executable, str(PLUGIN / "scripts/validate_package.py"), str(package)
+            ], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            lock = json.loads((package / "package.lock").read_text(encoding="utf-8"))
+            self.assertEqual(lock["generated_by"], "agentourcore.lockfile/1")
+            self.assertNotIn("package.lock", lock["files"])
 
     def test_compiler_skill_supports_update_and_adaptive_discovery(self):
         skill = (PLUGIN / "skills/agentour-compiler/SKILL.md").read_text(encoding="utf-8")

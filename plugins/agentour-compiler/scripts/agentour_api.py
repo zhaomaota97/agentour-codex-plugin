@@ -392,6 +392,7 @@ def main():
     update = sub.add_parser("check-update")
     update.add_argument("--auto", action="store_true")
     sub.add_parser("contract")
+    sub.add_parser("build-preflight")
     probe = sub.add_parser("model-probe")
     probe.add_argument("model")
     feedback = sub.add_parser("feedback")
@@ -453,6 +454,11 @@ def main():
         cmd_check_update(args)
     elif args.command == "contract":
         print(json.dumps(authenticated(args, "/v1/dev/compiler-contract"), ensure_ascii=False, indent=2))
+    elif args.command == "build-preflight":
+        result = authenticated(args, "/v1/dev/build-preflight")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result.get("ready"):
+            raise SystemExit(1)
     elif args.command == "model-probe":
         model = urllib.parse.quote(args.model, safe="")
         print(json.dumps(authenticated(args, f"/v1/dev/model-probe/{model}", method="POST"),

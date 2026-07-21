@@ -52,6 +52,9 @@ Package hash, revision, and updated time. Platform job status wins over stale lo
 - Continue existing Validation, Build, Eval, and Publish Job IDs instead of resubmitting them.
 - When source, Manifest, model, or lockfile hashes change, invalidate from the earliest affected stage.
 - Mark the platform task `completed` or `cancelled` at a terminal outcome.
+- Record `stage_started_at`, `stage_finished_at`, and `duration_seconds` for discovery, conversion,
+  environment preparation, local validation, platform validation, remote Build, Smoke/Evals, upload,
+  and publish. Report the current stage by its real name; never call the entire Compiler run “上传”.
 
 ### 1. Platform choice
 
@@ -199,7 +202,13 @@ Revalidate the token immediately before upload. Show one compact summary of plat
 
 Only after that explicit confirmation, run the paid-resource remote Build Gate. Never run it during discovery, interview, local validation, visibility selection, or while awaiting confirmation. Cached content does not consume a new E2B Build quota.
 
+Immediately before consuming Build quota, run `build-preflight`. It must confirm the E2B service,
+required Runtime Profile template, active-job capacity, hourly quota, daily quota, Node and Eve contract.
+If it is not ready, preserve the task and Package checkpoint and wait; do not enter a doomed Build.
+
 ```bash
+python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \
+  --platform <local|competition> build-preflight
 python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \
   --platform <local|competition> remote-build packages/<agent-id>
 ```
