@@ -66,6 +66,19 @@ class PluginTests(unittest.TestCase):
         self.assertIn("remote-build", (PLUGIN / "scripts/agentour_api.py").read_text())
         self.assertIn("compiler-tasks", (PLUGIN / "scripts/agentour_api.py").read_text())
         self.assertIn("build-preflight", (PLUGIN / "scripts/agentour_api.py").read_text())
+        self.assertIn("bootstrap", (PLUGIN / "scripts/agentour_api.py").read_text())
+
+    def test_bootstrap_requires_platform_before_interview(self):
+        api = load_api()
+        args = SimpleNamespace(target_platform=None, platform="competition")
+        with mock.patch.object(api, "check_update", return_value={
+                "checked": True, "outdated": False, "updated": False}), \
+             mock.patch.object(api.pathlib.Path, "is_file", return_value=False):
+            with mock.patch("builtins.print") as output:
+                api.cmd_bootstrap(args)
+        payload = json.loads(output.call_args.args[0])
+        self.assertTrue(payload["platform_choice_required"])
+        self.assertFalse(payload["ready_for_interview"])
 
     def test_static_validator_generates_platform_package_lock(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -137,6 +150,20 @@ class PluginTests(unittest.TestCase):
                 for key, value in old.items():
                     if value is None: os.environ.pop(key, None)
                     else: os.environ[key] = value
+
+    def test_failed_wsl_keychain_falls_back_to_stable_restricted_file(self):
+        path = PLUGIN / "scripts/credential_store.py"
+        spec = importlib.util.spec_from_file_location("credential_store_fallback", path)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp, \
+             mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": temp,
+                                          "AGENTOUR_CREDENTIAL_BACKEND": "windows-credential-manager"}), \
+             mock.patch.object(module, "_ps", return_value=SimpleNamespace(
+                 returncode=1, stdout="", stderr="unavailable")):
+            self.assertEqual(module.set_token("competition", "at_persistent_value"), "restricted-file")
+            self.assertEqual(module.get_token("competition"), "at_persistent_value")
+            credential = pathlib.Path(temp) / "agentour/credentials.json"
+            self.assertEqual(credential.stat().st_mode & 0o777, 0o600)
 
     def test_package_tarball(self):
         api = load_api()

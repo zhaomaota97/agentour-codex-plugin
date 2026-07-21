@@ -7,9 +7,30 @@ description: Automatically create, reconstruct, validate, fidelity-test, and pub
 
 Own the complete workflow. The user must not orchestrate skills, commands, phases, validation, or retries.
 
-## Mandatory version check
+## Non-bypassable bootstrap gate
 
-Before asking the first workflow question, run:
+Immediately after reading this Skill, before any user-facing explanation or workflow question, run:
+
+```bash
+python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" bootstrap
+```
+
+Do not say “I will use Agentour Compiler” first. Do not enter Brainstorm, inspect requirements, or ask
+the Agent's purpose until the command returns `ready_for_interview: true`.
+
+- `restart_required`: stop and ask for a new Thread.
+- `platform_choice_required`: ask only the fixed platform choice, then rerun with
+  `bootstrap --target-platform <local|competition>`.
+- `token_required`: ask only for that platform's developer token, store it, then rerun the same command.
+- `blocked`: stop and report the bootstrap error.
+- `ready_for_interview`: use the returned Contract, recommended model, and active Compiler Tasks.
+
+The bootstrap transcript is the audit proof that update, identity, Contract, model probes and recovery
+checks ran. Absence of this command means the workflow has not started correctly.
+
+## Bootstrap internals: version check
+
+The bootstrap command internally runs:
 
 ```bash
 python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" check-update --auto

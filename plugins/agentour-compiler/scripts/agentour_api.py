@@ -32,7 +32,7 @@ DEFAULT_IGNORES = {
     "__pycache__", ".DS_Store",
 }
 DEFAULT_PATTERNS = {"*.log", "*.tmp", "*.swp", ".agentour-*.log"}
-PLUGIN_VERSION = "0.8.0"
+PLUGIN_VERSION = "0.8.1"
 LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/Onesyn-ai/agentour-codex-plugin/main/plugins/agentour-compiler/.codex-plugin/plugin.json"
 
 
@@ -117,6 +117,46 @@ def cmd_verify_token(args):
 
 
 def cmd_models(args):
+    print(json.dumps(discover_models(args), ensure_ascii=False, indent=2), flush=True)
+
+
+def cmd_check_update(args):
+    result = check_update(auto=args.auto)
+    print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
+    if result.get("outdated") and args.auto and not result.get("updated"):
+        raise SystemExit(1)
+
+
+def check_update(*, auto: bool) -> dict:
+    try:
+        with urllib.request.urlopen(LATEST_MANIFEST_URL, timeout=15) as response:
+            latest = str(json.loads(response.read()).get("version", "")).split("+", 1)[0]
+    except Exception as exc:
+        return {"checked": False, "current": PLUGIN_VERSION,
+                "warning": f"无法检查 Plugin 更新: {exc}"}
+    current = PLUGIN_VERSION.split("+", 1)[0]
+    def version_key(value):
+        match = re.match(r"^(\d+)\.(\d+)\.(\d+)", value)
+        return tuple(map(int, match.groups())) if match else (0, 0, 0)
+    outdated = version_key(latest) > version_key(current)
+    result = {"checked": True, "current": current, "latest": latest,
+              "outdated": outdated, "updated": False}
+    if outdated and auto:
+        refresh = subprocess.run(
+            ["codex", "plugin", "marketplace", "upgrade", "agentour-platform"],
+            text=True, capture_output=True)
+        completed = (subprocess.run(
+            ["codex", "plugin", "add", "agentour-compiler@agentour-platform"],
+            text=True, capture_output=True) if refresh.returncode == 0 else refresh)
+        result["updated"] = refresh.returncode == 0 and completed.returncode == 0
+        if not result["updated"]:
+            result["error"] = (completed.stderr or completed.stdout)[-1000:]
+        else:
+            result["restart_required"] = True
+    return result
+
+
+def discover_models(args) -> dict:
     discovered = request(args.platform, "/v1/models?modality=chat").get("data", [])
     available, unavailable = [], []
     for item in discovered:
@@ -135,41 +175,66 @@ def cmd_models(args):
         except SystemExit as exc:
             unavailable.append({"id": model_id, "error": str(exc)[:500]})
     available.sort(key=lambda item: (-int(item.get("quality_rank", 0)), item.get("id", "")))
-    recommended = available[0]["id"] if available else None
-    print(json.dumps({"object": "list", "data": available,
-                      "recommended_model": recommended,
-                      "filtered_unavailable": unavailable}, ensure_ascii=False, indent=2), flush=True)
+    return {"object": "list", "data": available,
+            "recommended_model": available[0]["id"] if available else None,
+            "filtered_unavailable": unavailable}
 
 
-def cmd_check_update(args):
-    try:
-        with urllib.request.urlopen(LATEST_MANIFEST_URL, timeout=15) as response:
-            latest = str(json.loads(response.read()).get("version", "")).split("+", 1)[0]
-    except Exception as exc:
-        print(json.dumps({"checked": False, "current": PLUGIN_VERSION,
-                          "warning": f"无法检查 Plugin 更新: {exc}"}, ensure_ascii=False), flush=True)
+def cmd_bootstrap(args):
+    update = check_update(auto=True)
+    result = {"bootstrap_version": 1, "plugin_update": update,
+              "ready_for_interview": False}
+    if update.get("updated"):
+        result["restart_required"] = True
+        print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
         return
-    current = PLUGIN_VERSION.split("+", 1)[0]
-    def version_key(value):
-        match = re.match(r"^(\d+)\.(\d+)\.(\d+)", value)
-        return tuple(map(int, match.groups())) if match else (0, 0, 0)
-    outdated = version_key(latest) > version_key(current)
-    result = {"checked": True, "current": current, "latest": latest,
-              "outdated": outdated, "updated": False}
-    if outdated and args.auto:
-        refresh = subprocess.run(
-            ["codex", "plugin", "marketplace", "upgrade", "agentour-platform"],
-            text=True, capture_output=True)
-        completed = (subprocess.run(
-            ["codex", "plugin", "add", "agentour-compiler@agentour-platform"],
-            text=True, capture_output=True) if refresh.returncode == 0 else refresh)
-        result["updated"] = refresh.returncode == 0 and completed.returncode == 0
-        if not result["updated"]:
-            result["error"] = (completed.stderr or completed.stdout)[-1000:]
+    if update.get("outdated") and not update.get("updated"):
+        result["blocked"] = True
+        print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
+        raise SystemExit(1)
+    platform = args.target_platform
+    if not platform:
+        state_path = pathlib.Path(".agentour/compiler-state.json")
+        inferred = ""
+        if state_path.is_file():
+            try:
+                raw = json.loads(state_path.read_text(encoding="utf-8"))
+                inferred = str(raw.get("platform") or raw.get("platform_id") or "")
+            except Exception:
+                pass
+        if inferred in PLATFORMS:
+            platform = inferred
         else:
-            result["restart_required"] = True
+            result["platform_choice_required"] = True
+            result["platforms"] = PLATFORMS
+            print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
+            return
+    args.platform = platform
+    token = os.environ.get("AGENTOUR_TOKEN", "").strip() or get_token(platform)
+    if not token.startswith("at_"):
+        result.update({"platform": platform, "token_required": True})
+        print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
+        return
+    try:
+        identity = authenticated(args, "/v1/dev/me")
+        contract = authenticated(args, "/v1/dev/compiler-contract")
+        models = discover_models(args)
+        tasks = authenticated(args, "/v1/dev/compiler-tasks?active=true")
+    except SystemExit as exc:
+        result.update({"platform": platform, "blocked": True, "error": str(exc)})
+        print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
+        raise
+    result.update({
+        "platform": platform,
+        "developer_id": identity.get("developer_id"),
+        "contract_version": contract.get("contract_version"),
+        "contract": contract,
+        "models": models,
+        "active_compiler_tasks": tasks,
+        "ready_for_interview": bool(models.get("recommended_model")),
+    })
     print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
-    if outdated and args.auto and not result["updated"]:
+    if not result["ready_for_interview"]:
         raise SystemExit(1)
 
 
@@ -387,6 +452,8 @@ def main():
     parser.add_argument("--platform", choices=PLATFORMS, default="competition")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("platforms")
+    bootstrap = sub.add_parser("bootstrap")
+    bootstrap.add_argument("--target-platform", choices=PLATFORMS)
     sub.add_parser("verify-token")
     sub.add_parser("models")
     update = sub.add_parser("check-update")
@@ -446,6 +513,8 @@ def main():
     args = parser.parse_args()
     if args.command == "platforms":
         print(json.dumps(PLATFORMS, ensure_ascii=False, indent=2))
+    elif args.command == "bootstrap":
+        cmd_bootstrap(args)
     elif args.command == "verify-token":
         cmd_verify_token(args)
     elif args.command == "models":

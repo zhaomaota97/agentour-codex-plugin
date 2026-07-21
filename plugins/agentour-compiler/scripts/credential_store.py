@@ -97,15 +97,18 @@ def get_token(platform: str) -> str:
     if backend == "windows-credential-manager":
         script = f"$v=New-Object Windows.Security.Credentials.PasswordVault; try{{$c=$v.Retrieve('{SERVICE}','{account}');$c.RetrievePassword();[Console]::Out.Write($c.Password)}}catch{{exit 1}}"
         result = _ps(script)
-        return result.stdout.strip() if result.returncode == 0 else ""
+        value = result.stdout.strip() if result.returncode == 0 else ""
+        return value or str(_fallback_load().get(platform, "")).strip()
     if backend == "macos-keychain":
         result = subprocess.run(["security", "find-generic-password", "-s", SERVICE,
                                  "-a", account, "-w"], text=True, capture_output=True)
-        return result.stdout.strip() if result.returncode == 0 else ""
+        value = result.stdout.strip() if result.returncode == 0 else ""
+        return value or str(_fallback_load().get(platform, "")).strip()
     if backend == "linux-secret-service":
         result = subprocess.run(["secret-tool", "lookup", "service", SERVICE,
                                  "account", account], text=True, capture_output=True)
-        return result.stdout.strip() if result.returncode == 0 else ""
+        value = result.stdout.strip() if result.returncode == 0 else ""
+        return value or str(_fallback_load().get(platform, "")).strip()
     return str(_fallback_load().get(platform, "")).strip()
 
 
@@ -122,20 +125,23 @@ def set_token(platform: str, token: str) -> str:
         script = f"$v=New-Object Windows.Security.Credentials.PasswordVault; try{{$old=$v.Retrieve('{SERVICE}','{account}');$v.Remove($old)}}catch{{}};$v.Add((New-Object Windows.Security.Credentials.PasswordCredential('{SERVICE}','{account}',$env:AGENTOUR_CREDENTIAL_VALUE)))"
         result = _ps(script, token=token)
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "Windows Credential Manager write failed")
+            data = _fallback_load(); data[platform] = token; _fallback_write(data)
+            return "restricted-file"
     elif backend == "macos-keychain":
         subprocess.run(["security", "delete-generic-password", "-s", SERVICE, "-a", account],
                        capture_output=True)
         result = subprocess.run(["security", "add-generic-password", "-U", "-s", SERVICE,
                                  "-a", account, "-w", token], text=True, capture_output=True)
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "Keychain write failed")
+            data = _fallback_load(); data[platform] = token; _fallback_write(data)
+            return "restricted-file"
     elif backend == "linux-secret-service":
         result = subprocess.run(["secret-tool", "store", "--label", "Agentour developer token",
                                  "service", SERVICE, "account", account], input=token,
                                 text=True, capture_output=True)
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "Secret Service write failed")
+            data = _fallback_load(); data[platform] = token; _fallback_write(data)
+            return "restricted-file"
     else:
         data = _fallback_load(); data[platform] = token; _fallback_write(data)
     return backend
@@ -149,8 +155,18 @@ def delete_token(platform: str) -> None:
         subprocess.run(["security", "delete-generic-password", "-s", SERVICE, "-a", account], capture_output=True)
     elif backend == "linux-secret-service":
         subprocess.run(["secret-tool", "clear", "service", SERVICE, "account", account], capture_output=True)
-    elif backend == "restricted-file":
-        data = _fallback_load(); data.pop(platform, None); _fallback_write(data)
+    data = _fallback_load()
+    if platform in data:
+        data.pop(platform, None); _fallback_write(data)
+
+
+def storage_status(platform: str) -> dict:
+    stored = bool(get_token(platform))
+    backend = backend_name()
+    if stored and platform in _fallback_load():
+        backend = "restricted-file"
+    return {"stored": stored, "backend": backend, "path":
+            str(_fallback_path()) if backend == "restricted-file" else "system-keychain"}
 
 
 def main() -> None:
@@ -159,7 +175,7 @@ def main() -> None:
     command = sys.argv[1]
     if command == "status":
         platforms = [sys.argv[2]] if len(sys.argv) > 2 else sorted(PLATFORMS)
-        print(json.dumps({p: {"stored": bool(get_token(p)), "backend": backend_name()} for p in platforms}, ensure_ascii=False))
+        print(json.dumps({p: storage_status(p) for p in platforms}, ensure_ascii=False))
     elif command == "set":
         platform = _check(sys.argv[2])
         token = sys.stdin.read().strip() if not sys.stdin.isatty() else getpass.getpass("Developer token: ")
