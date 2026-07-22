@@ -34,13 +34,17 @@ class PluginTests(unittest.TestCase):
             "tests/smoke.yaml": 'schema_version: 1\ncases:\n  - send: "x"\n    expect_contains: "ok"\n',
             "payload/package.json": '{"engines":{"node":">=24"},"packageManager":"pnpm@10.23.0"}\n',
             "payload/pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+            "payload/pnpm-workspace.yaml": "packages:\n  - '.'\nminimumReleaseAge: 1440\nallowBuilds: {}\n",
             "payload/agent/agent.ts": "const url = process.env.AGENTOUR_URL;\n",
-            "payload/agent/instructions.md": "# Demo\n缺少信息时调用 ask_question。\n",
+            "payload/agent/instructions.md": "# Demo\n缺少信息时调用 ask_question。工具失败时不得声称成功，并说明下一步。\n",
             "payload/agent/sandbox/sandbox.ts": "export default {};\n",
         }
         manifest = {
+            "compiler_contract_version": 4,
             "id": "demo", "name": "Demo", "version": "0.1.0", "runtime": "eve",
             "capabilities": ["review"], "description": "Demo", "pricing": {"model": "per_run", "amount_credits": 5},
+            "deliverable": {"required": True, "formats": ["markdown"]},
+            "examples": ["完整输入一", "完整输入二"],
             "runtime_ui": {
                 "startup_message": "正在启动审查助手…",
                 "default_working_message": "正在分析内容…",

@@ -153,6 +153,31 @@ def main() -> int:
         if not value: critical.append(f"runtime_ui.{field} is required")
         elif FORBIDDEN_UI.search(value): critical.append(f"Internal terminology in runtime_ui.{field}")
 
+    if int(manifest.get("compiler_contract_version", 0) or 0) >= 3:
+        tool_ux = manifest.get("tool_ux") or {}
+        tools_dir = root / "payload/agent/tools"
+        if tools_dir.is_dir():
+            for tool_file in sorted(tools_dir.glob("*.ts")):
+                name = tool_file.stem
+                zh_name = str((tool_ux.get(name) or {}).get("zh_name", ""))
+                if not re.search(r"[\u4e00-\u9fff]", zh_name):
+                    critical.append(f"tool_ux.{name}.zh_name must contain a business-readable Chinese name")
+        approval_ux = manifest.get("approval_ux") or {}
+        approval_fields = {"title", "purpose", "action", "impact", "risk", "deny_effect"}
+        for tool in manifest.get("approval_required") or []:
+            contract = approval_ux.get(tool) if isinstance(approval_ux, dict) else None
+            missing_fields = sorted(approval_fields - set(contract or {}))
+            if missing_fields:
+                critical.append(f"approval_ux.{tool} missing fields: {', '.join(missing_fields)}")
+        deliverable = manifest.get("deliverable") or {}
+        if deliverable.get("required") is not True:
+            critical.append("deliverable.required must be true")
+        if not deliverable.get("formats"):
+            critical.append("deliverable.formats must declare at least one output format")
+        examples = manifest.get("examples") or []
+        if len(examples) < 2 or any(not str(item).strip() or "EXAMPLE_" in str(item) for item in examples):
+            critical.append("manifest.examples must contain at least two complete, executable user inputs")
+
     scanned = 0
     for path in files(root):
         scanned += 1
@@ -168,6 +193,10 @@ def main() -> int:
     instructions = root / "payload/agent/instructions.md"
     content = instructions.read_text(encoding="utf-8") if instructions.is_file() else ""
     if "ask_question" not in content: warnings.append("Missing-input behavior should use Eve ask_question")
+    if "DELIVERABLE_ACCEPTANCE_CRITERIA" in content or "OUTPUT_REQUIREMENTS" in content:
+        critical.append("instructions.md still contains unresolved output or acceptance placeholders")
+    if not re.search(r"(失败|error).{0,80}(不得声称成功|do not claim success|下一步)", content, re.I | re.S):
+        critical.append("instructions.md must define honest tool-failure and fallback-delivery behavior")
     if manifest.get("approval_required") and "审批" not in content and "approval" not in content.lower():
         critical.append("Approval is declared but instructions do not explain it")
     if re.search(r"等待审批.{0,20}(正在执行|运行中|思考中)", content):
