@@ -246,6 +246,8 @@ On HTTP `429`, explain that the active/daily E2B quota is exhausted and wait rat
 mutating content or looping retries. Cached Build results are valid and consume no new quota.
 Cancel a superseded or user-cancelled job with `cancel-build <job-id>` and confirm its terminal
 status before starting another paid Build.
+If polling is interrupted or the local command times out, resume that exact paid Job with
+`track-build <job-id>`; never resubmit merely because observation stopped.
 
 ```bash
 AGENTOUR_TOKEN="<token>" python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \

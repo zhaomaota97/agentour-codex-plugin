@@ -35,6 +35,8 @@ The token is never written to files or reports.
 new E2B quota. HTTP `429` means the active or daily quota is exhausted and must not be bypassed
 with blind retries. Deterministic failures require a Package repair. Superseded jobs can be
 stopped with `cancel-build <job-id>`.
+Interrupted observation can be continued with `track-build <job-id>` without creating or charging
+a replacement Build.
 
 At workflow startup the Plugin checks the latest GitHub Marketplace version. If a newer version exists it runs the Codex Plugin installer automatically, then asks you to start a new Thread so Codex loads the new code.
 

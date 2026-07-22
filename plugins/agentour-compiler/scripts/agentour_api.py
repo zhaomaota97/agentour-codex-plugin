@@ -20,6 +20,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from credential_store import delete_token, get_token
 from flight_recorder import read as read_flight, record as record_flight, record_job_sample
@@ -33,8 +38,12 @@ DEFAULT_IGNORES = {
     "__pycache__", ".DS_Store",
 }
 DEFAULT_PATTERNS = {"*.log", "*.tmp", "*.swp", ".agentour-*.log"}
-PLUGIN_VERSION = "0.8.2"
+PLUGIN_VERSION = "0.8.2+codex.20260722073309"
 LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/Onesyn-ai/agentour-codex-plugin/main/plugins/agentour-compiler/.codex-plugin/plugin.json"
+
+
+class APITransportError(RuntimeError):
+    """A retryable transport failure. POST callers must not blindly resubmit."""
 
 
 def base_url(platform: str) -> str:
@@ -63,8 +72,9 @@ def request(platform: str, path: str, *, method: str = "GET",
         if auth and exc.code in {401, 403} and not os.environ.get("AGENTOUR_TOKEN", "").strip():
             delete_token(platform)
         raise SystemExit(f"Agentour API {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise SystemExit(f"Cannot reach {base_url(platform)}: {exc.reason}") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise APITransportError(f"Cannot reach {base_url(platform)}: {reason}") from exc
 
 
 def ignore_rules(package_dir: pathlib.Path) -> tuple[set[str], set[str]]:
@@ -109,6 +119,19 @@ def package_payload(package_dir: pathlib.Path) -> tuple[bytes, dict]:
 def authenticated(args, path: str, *, method: str = "GET", body: dict | None = None):
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
     return request(args.platform, path, method=method, data=data, auth=True)
+
+
+def poll_job(args, path: str, job_type: str, job_id: str):
+    """Poll an already-created job; transient reads never create a replacement job."""
+    try:
+        return authenticated(args, path)
+    except APITransportError as exc:
+        record_flight("job_poll_transport_error", job_type=job_type, job_id=job_id,
+                      error=str(exc), retrying_same_job=True)
+        print(json.dumps({"job_id": job_id, "status": "tracking_interrupted",
+                          "retrying_same_job": True, "error": str(exc)},
+                         ensure_ascii=False), flush=True)
+        return None
 
 
 def sync_flight(args, task_id: str = "") -> None:
@@ -327,11 +350,12 @@ def cmd_build_test(args):
     if not (payload / "package.json").is_file():
         raise SystemExit(f"Missing payload/package.json in {package}")
     host_build = False
+    pnpm_command = "pnpm.cmd" if os.name == "nt" else "pnpm"
     try:
         node_version = subprocess.check_output(["node", "--version"], text=True).strip()
         host_build = int(node_version.lstrip("v").split(".", 1)[0]) >= 24
         if host_build:
-            subprocess.run(["pnpm", "--version"], check=True, capture_output=True, text=True)
+            subprocess.run([pnpm_command, "--version"], check=True, capture_output=True, text=True)
     except (FileNotFoundError, subprocess.CalledProcessError, ValueError):
         host_build = False
     if not host_build:
@@ -339,7 +363,8 @@ def cmd_build_test(args):
                                 text=True, capture_output=True)
         if docker.returncode != 0:
             raise SystemExit("Node 24+ is unavailable and Docker image agentour-runtime:1 is missing")
-    with tempfile.TemporaryDirectory(prefix="agentour-build-") as td:
+    td = tempfile.mkdtemp(prefix="agentour-build-")
+    try:
         started_at = time.time()
         record_flight("local_build_started", package=str(package))
         target = pathlib.Path(td) / package.name
@@ -351,8 +376,8 @@ def cmd_build_test(args):
         docker_user = (["--user", f"{os.getuid()}:{os.getgid()}"]
                        if hasattr(os, "getuid") else [])
         commands = ([
-            ["pnpm", "install", "--frozen-lockfile"],
-            ["pnpm", "exec", "eve", "build"],
+            [pnpm_command, "install", "--frozen-lockfile"],
+            [pnpm_command, "exec", "eve", "build"],
         ] if host_build else [[
             "docker", "run", "--rm", *docker_user,
             "-e", "HOME=/tmp", "-e", "AGENTOUR_BUILD=1",
@@ -372,6 +397,19 @@ def cmd_build_test(args):
                               duration_seconds=round(time.time() - started_at, 3),
                               error=(result.stdout + result.stderr)[-4000:])
                 raise SystemExit(f"{' '.join(command)} failed:\n{(result.stdout + result.stderr)[-4000:]}")
+    finally:
+        import shutil
+        for attempt in range(4):
+            try:
+                shutil.rmtree(td)
+                break
+            except FileNotFoundError:
+                break
+            except OSError as exc:
+                if attempt == 3:
+                    record_flight("temporary_directory_cleanup_failed", path=td, error=str(exc))
+                else:
+                    time.sleep(0.2 * (attempt + 1))
     record_flight("local_build_completed", package=str(package),
                   duration_seconds=round(time.time() - started_at, 3))
     print(json.dumps({"ok": True, "package": str(package),
@@ -397,7 +435,10 @@ def cmd_validate(args):
     polls = 0; unchanged_since = time.monotonic(); last_sample_at = 0.0
     while time.monotonic() < deadline:
         polls += 1
-        job = authenticated(args, f"/v1/dev/validate-jobs/{job_id}")
+        job = poll_job(args, f"/v1/dev/validate-jobs/{job_id}", "validation", job_id)
+        if job is None:
+            time.sleep(args.poll_interval)
+            continue
         signature = (job.get("status"), job.get("updated_at"), job.get("error"))
         changed = signature != previous
         if changed:
@@ -433,7 +474,10 @@ def cmd_remote_build(args):
     polls = 0; unchanged_since = time.monotonic(); last_sample_at = 0.0
     while time.monotonic() < deadline:
         polls += 1
-        job = authenticated(args, f"/v1/dev/builds/{job_id}")
+        job = poll_job(args, f"/v1/dev/builds/{job_id}", "remote_build", job_id)
+        if job is None:
+            time.sleep(args.poll_interval)
+            continue
         signature = (job.get("status"), json.dumps(job.get("data", {}).get("gates", []), sort_keys=True))
         changed = signature != previous
         if changed:
@@ -457,6 +501,26 @@ def cmd_cancel_build(args):
     result = authenticated(args, f"/v1/dev/builds/{urllib.parse.quote(args.job_id, safe='')}/cancel",
                            method="POST")
     print(json.dumps(result, ensure_ascii=False), flush=True)
+
+
+def cmd_track_build(args):
+    """Resume observation of an existing paid Build without submitting another archive."""
+    deadline = time.monotonic() + args.timeout
+    polls = 0
+    while time.monotonic() < deadline:
+        polls += 1
+        job = poll_job(args, f"/v1/dev/builds/{urllib.parse.quote(args.job_id, safe='')}",
+                       "remote_build", args.job_id)
+        if job is None:
+            time.sleep(args.poll_interval); continue
+        print(json.dumps(job, ensure_ascii=False), flush=True)
+        record_job_sample("remote_build", job, poll_count=polls, unchanged_seconds=0,
+                          poll_interval_seconds=args.poll_interval)
+        if job.get("status") in {"succeeded", "failed", "cancelled", "timed_out"}:
+            if job.get("status") != "succeeded": raise SystemExit(1)
+            return
+        time.sleep(args.poll_interval)
+    raise SystemExit(f"Build Job {args.job_id} is still non-terminal; resume with track-build {args.job_id}")
 
 
 def cmd_compiler_tasks(args):
@@ -569,6 +633,10 @@ def main():
     remote_build.add_argument("--poll-interval", type=float, default=2)
     cancel_build = sub.add_parser("cancel-build")
     cancel_build.add_argument("job_id")
+    track_build = sub.add_parser("track-build")
+    track_build.add_argument("job_id")
+    track_build.add_argument("--timeout", type=float, default=1800)
+    track_build.add_argument("--poll-interval", type=float, default=2)
     tasks = sub.add_parser("compiler-tasks")
     tasks.add_argument("--active", action=argparse.BooleanOptionalAction, default=True)
     create_task = sub.add_parser("create-compiler-task")
@@ -639,6 +707,8 @@ def main():
         cmd_remote_build(args)
     elif args.command == "cancel-build":
         cmd_cancel_build(args)
+    elif args.command == "track-build":
+        cmd_track_build(args)
     elif args.command == "compiler-tasks":
         cmd_compiler_tasks(args)
     elif args.command == "create-compiler-task":

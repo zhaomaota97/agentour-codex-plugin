@@ -8,6 +8,7 @@ import pathlib
 import re
 import tempfile
 import time
+import hashlib
 
 _SECRET_KEYS = re.compile(r"(token|secret|password|api[_-]?key|credential|authorization)", re.I)
 _SECRET_VALUES = [
@@ -22,7 +23,15 @@ _MAX_EVENTS = 5000
 
 def _path() -> pathlib.Path:
     override = os.environ.get("AGENTOUR_COMPILER_FLIGHT_LOG", "").strip()
-    return pathlib.Path(override).expanduser() if override else pathlib.Path(".agentour/compiler-flight-events.json")
+    if override:
+        return pathlib.Path(override).expanduser()
+    # Flight data belongs to the compiler workspace, never to the Agent Package.
+    # Keeping it outside cwd prevents telemetry growth from changing package hashes.
+    workspace = str(pathlib.Path.cwd().resolve())
+    workspace_id = hashlib.sha256(workspace.encode("utf-8")).hexdigest()[:20]
+    root = pathlib.Path(os.environ.get(
+        "AGENTOUR_COMPILER_STATE_HOME", pathlib.Path.home() / ".agentour" / "compiler"))
+    return root.expanduser() / "flight-events" / f"{workspace_id}.json"
 
 
 def redact(value, key: str = ""):
@@ -91,4 +100,3 @@ def record_job_sample(job_type: str, job: dict, *, poll_count: int,
         poll_count=poll_count, poll_interval_seconds=poll_interval_seconds,
         unchanged_status_seconds=round(unchanged_seconds, 1),
     )
-

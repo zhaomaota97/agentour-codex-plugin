@@ -158,6 +158,26 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("secret-value", json.dumps(data))
         self.assertEqual(data["events"][1]["poll_count"], 3)
 
+    def test_default_flight_log_is_outside_package(self):
+        script = PLUGIN / "scripts/flight_recorder.py"
+        spec = importlib.util.spec_from_file_location("agentour_flight_path_test", script)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(module.pathlib.Path, "cwd", return_value=pathlib.Path(td)):
+            old = os.environ.pop("AGENTOUR_COMPILER_FLIGHT_LOG", None)
+            try:
+                self.assertFalse(module._path().is_relative_to(pathlib.Path(td)))
+            finally:
+                if old is not None: os.environ["AGENTOUR_COMPILER_FLIGHT_LOG"] = old
+
+    def test_job_poll_transport_failure_resumes_same_job(self):
+        api = load_api()
+        args = SimpleNamespace(platform="competition")
+        with mock.patch.object(api, "authenticated", side_effect=api.APITransportError("timeout")), \
+             mock.patch.object(api, "record_flight") as record:
+            self.assertIsNone(api.poll_job(args, "/v1/dev/builds/bld_1", "remote_build", "bld_1"))
+        self.assertEqual(record.call_args.kwargs["job_id"], "bld_1")
+        self.assertTrue(record.call_args.kwargs["retrying_same_job"])
+
     def test_credentials_are_separated_by_platform(self):
         path = PLUGIN / "scripts/credential_store.py"
         spec = importlib.util.spec_from_file_location("credential_store_test", path)

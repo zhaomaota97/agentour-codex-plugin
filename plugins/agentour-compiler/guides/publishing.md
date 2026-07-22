@@ -14,3 +14,5 @@ Run `remote-build` only after final confirmation. Cached responses are successfu
 do not consume quota. Treat `429` as a quota wait condition, not as a retry invitation. Repair
 deterministic structured Gate failures before resubmitting, and use `cancel-build <job-id>` for a
 superseded Build.
+If local polling or networking is interrupted, recover the same Job with `track-build <job-id>`.
+An observation failure is not evidence that the remote Build failed.
