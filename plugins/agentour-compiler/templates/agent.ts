@@ -6,7 +6,7 @@ const runtimeToken = process.env.AGENTOUR_RUNTIME_TOKEN || "";
 
 const provider = createOpenAICompatible({
   name: "agentour",
-  baseURL: `${agentourURL || "http://127.0.0.1:8600"}/v1/llm`,
+  baseURL: `${agentourURL || "https://test.agentour.ai"}/v1/llm`,
   apiKey: runtimeToken,
 });
 

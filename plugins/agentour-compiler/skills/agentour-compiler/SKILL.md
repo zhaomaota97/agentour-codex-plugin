@@ -53,10 +53,10 @@ Every interactive turn may ask exactly one question or request exactly one choic
 
 | Choice | Name | URL |
 |---|---|---|
-| A | 本地服 | `http://127.0.0.1:8600` |
+| A | 测试服 | `https://test.agentour.ai` |
 | B | 比赛服 | `https://agentour.ai` |
 
-Never ask the user to type a URL. Never infer localhost for 比赛服.
+Never ask the user to type a URL. 测试服 and 比赛服 always use the fixed HTTPS URLs above.
 
 ## Mandatory dual state machine
 
@@ -81,7 +81,7 @@ Package hash, revision, and updated time. Platform job status wins over stale lo
 
 The first unresolved question must be exactly:
 
-> 请选择发布平台：A. 本地服；B. 比赛服。
+> 请选择发布平台：A. 测试服；B. 比赛服。
 
 Record the selected name and URL.
 

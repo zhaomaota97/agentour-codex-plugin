@@ -84,7 +84,7 @@ class PluginTests(unittest.TestCase):
 
     def test_fixed_platform_urls(self):
         api = load_api()
-        self.assertEqual(api.base_url("local"), "http://127.0.0.1:8600")
+        self.assertEqual(api.base_url("test"), "https://test.agentour.ai")
         self.assertEqual(api.base_url("competition"), "https://agentour.ai")
         self.assertIn("remote-build", (PLUGIN / "scripts/agentour_api.py").read_text())
         self.assertIn("compiler-tasks", (PLUGIN / "scripts/agentour_api.py").read_text())

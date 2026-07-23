@@ -30,7 +30,7 @@ from credential_store import delete_token, get_token
 from flight_recorder import read as read_flight, record as record_flight, record_job_sample
 
 PLATFORMS = {
-    "local": {"name": "本地服", "url": "http://127.0.0.1:8600"},
+    "test": {"name": "测试服", "url": "https://test.agentour.ai"},
     "competition": {"name": "比赛服", "url": "https://agentour.ai"},
 }
 DEFAULT_IGNORES = {
@@ -397,7 +397,7 @@ def cmd_build_test(args):
         ]])
         for command in commands:
             build_env = {**os.environ, "AGENTOUR_BUILD": "1",
-                         "AGENTOUR_URL": "http://127.0.0.1:8600",
+                         "AGENTOUR_URL": "https://test.agentour.ai",
                          "AGENTOUR_RUNTIME_TOKEN": "build-only-placeholder"}
             result = subprocess.run(command, cwd=work, text=True, capture_output=True,
                                     timeout=args.timeout, env=build_env)
