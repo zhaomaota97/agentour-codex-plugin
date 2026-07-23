@@ -38,7 +38,16 @@ DEFAULT_IGNORES = {
     "__pycache__", ".DS_Store",
 }
 DEFAULT_PATTERNS = {"*.log", "*.tmp", "*.swp", ".agentour-*.log"}
-PLUGIN_VERSION = "0.8.2+codex.20260722073309"
+def installed_plugin_version() -> str:
+    """Read the manifest so release metadata cannot drift from the client."""
+    manifest = pathlib.Path(__file__).resolve().parents[1] / ".codex-plugin" / "plugin.json"
+    try:
+        return str(json.loads(manifest.read_text(encoding="utf-8"))["version"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return "0.0.0"
+
+
+PLUGIN_VERSION = installed_plugin_version()
 LATEST_MANIFEST_URL = "https://raw.githubusercontent.com/Onesyn-ai/agentour-codex-plugin/main/plugins/agentour-compiler/.codex-plugin/plugin.json"
 
 

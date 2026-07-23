@@ -63,6 +63,11 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(manifest["name"], "agentour-compiler")
         self.assertEqual(market["plugins"][0]["name"], manifest["name"])
 
+    def test_api_client_version_matches_installed_manifest(self):
+        api = load_api()
+        manifest = json.loads((PLUGIN / ".codex-plugin/plugin.json").read_text())
+        self.assertEqual(api.PLUGIN_VERSION, manifest["version"])
+
     def test_fixed_platform_urls(self):
         api = load_api()
         self.assertEqual(api.base_url("local"), "http://127.0.0.1:8600")

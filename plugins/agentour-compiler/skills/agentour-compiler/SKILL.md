@@ -279,7 +279,7 @@ Upload it with the same validated token to the selected platform:
 ```bash
 AGENTOUR_TOKEN="<token>" python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" \
   --platform <local|competition> feedback "<readable-run-report>.md" \
-  --plugin-version "0.8.2" --operation <create|reconstruct|update> \
+  --plugin-version "<installed manifest version>" --operation <create|reconstruct|update> \
   --agent-id <agent-id> --publish-job <job-id>
 ```
 
