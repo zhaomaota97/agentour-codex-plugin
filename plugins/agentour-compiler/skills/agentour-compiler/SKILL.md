@@ -171,6 +171,32 @@ completion, and deliverable acceptance must be explicit when inference would be 
 
 Do not implement until the spec can reproduce the intended workflow. Do not ask for a separate implementation confirmation when creation was already authorized.
 
+### Mandatory reference-material gate
+
+Before generating or modifying Package files, explicitly resolve whether the Agent depends on the
+expert's own documents, datasets, examples, SOPs, historical cases, databases, websites, repositories,
+or an existing MCP knowledge source. Never infer “no reference material” merely because the initial
+idea dump did not mention it. Unless the user already supplied materials or explicitly declined, the
+next highest-value single question must be:
+
+> 这个 Agent 是否需要使用你自己的参考资料或数据？如果需要，请提供本地文件路径，或说明它们来自网页、仓库、数据库还是现有 MCP；如果不需要，直接回答“不需要”。
+
+When local files are provided, upload them to that developer's Agentour knowledge space before Package
+generation:
+
+```bash
+python3 "${CODEX_PLUGIN_ROOT}/scripts/agentour_api.py" --platform <test|production> \
+  upload-references <file> [<file> ...]
+```
+
+Then call `/v1/plugin/knowledge/discover`, evaluate whether to reuse, extend, compose, or create the
+resulting asset, and record only the channel-neutral `knowledge` requirement in the Package. Never copy
+private source content or account-specific Asset IDs into the Package. Sensitive material remains owned
+by the user's knowledge space and is exposed to Runtime only through the scoped Knowledge MCP Gateway.
+For changing or live data, prefer a read-only connector/MCP source instead of taking a one-time file
+snapshot. Record the user's decision and uploaded source IDs in compiler state so resumed runs do not ask
+again or upload duplicates.
+
 ## Package generation
 
 Create each Package under `packages/<agent-id>/` from bundled templates with `agentour.json`, `README.md`, `RELEASE.md`, `tests/smoke.yaml`, and a complete `payload/` Eve project.

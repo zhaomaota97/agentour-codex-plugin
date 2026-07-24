@@ -121,6 +121,27 @@ class PluginTests(unittest.TestCase):
         self.assertIn("请尽可能完整地讲讲你想做的 Agent", skill)
         self.assertIn("/v1/dev/compiler-tasks", skill)
         self.assertIn("checkpoint-package", skill)
+        self.assertIn("Mandatory reference-material gate", skill)
+        self.assertIn("upload-references", skill)
+
+    def test_reference_upload_uses_developer_knowledge_endpoints(self):
+        api = load_api()
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps({
+            "id": "ksi_1", "source_id": "ksrc_1"
+        }).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            reference = pathlib.Path(temp) / "expert.md"
+            reference.write_text("# Expert", encoding="utf-8")
+            args = SimpleNamespace(platform="test", files=[str(reference)])
+            with mock.patch.dict(os.environ, {"AGENTOUR_TOKEN": "at_test"}), \
+                 mock.patch.object(api.urllib.request, "urlopen", return_value=response) as upload, \
+                 mock.patch.object(api, "authenticated", return_value={"assets": [{"id": "kas_1"}]}) as finalize, \
+                 mock.patch("builtins.print"):
+                api.cmd_upload_references(args)
+        self.assertIn("/v1/dev/knowledge/sources/files", upload.call_args.args[0].full_url)
+        self.assertEqual(finalize.call_args.args[1],
+                         "/v1/dev/knowledge/sources/files/finalize-batch")
 
     def test_compiler_task_commands_send_expected_contract(self):
         api = load_api()

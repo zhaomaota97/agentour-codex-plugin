@@ -562,7 +562,7 @@ def cmd_compiler_tasks(args):
 
 
 def cmd_create_compiler_task(args):
-    state = load_json_argument(args.state, args.state_file)
+    state = load_json_argument(args.state, getattr(args, "state_file", None))
     body = {"operation": args.operation, "agent_id": args.agent_id,
             "platform": args.platform, "workspace_id": args.workspace_id,
             "state": state}
@@ -648,6 +648,26 @@ def cmd_restore_checkpoint(args):
                       "sha256": actual}, ensure_ascii=False, indent=2), flush=True)
 
 
+def cmd_upload_references(args):
+    token=os.environ.get("AGENTOUR_TOKEN","").strip() or get_token(args.platform)
+    if not token.startswith("at_"):raise SystemExit("No saved developer token")
+    uploaded=[]
+    for raw in args.files:
+        path=pathlib.Path(raw).expanduser().resolve()
+        if not path.is_file():raise SystemExit(f"Reference file does not exist: {path}")
+        mime=__import__("mimetypes").guess_type(path.name)[0] or "application/octet-stream"
+        headers={"Authorization":f"Bearer {token}","Content-Type":mime,
+                 "X-Filename":urllib.parse.quote(path.name),"Accept":"application/json"}
+        req=urllib.request.Request(base_url(args.platform)+"/v1/dev/knowledge/sources/files",
+            data=path.read_bytes(),headers=headers,method="POST")
+        try:
+            with urllib.request.urlopen(req,timeout=180) as response:uploaded.append(json.loads(response.read()))
+        except urllib.error.HTTPError as exc:
+            raise SystemExit(f"Agentour API {exc.code}: {exc.read().decode('utf-8','replace')}") from exc
+    result=authenticated(args,"/v1/dev/knowledge/sources/files/finalize-batch",method="POST",body={})
+    print(json.dumps({"uploaded":uploaded,"assets":result.get("assets",[])},ensure_ascii=False,indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", choices=PLATFORMS, default="production")
@@ -709,6 +729,8 @@ def main():
     restore = sub.add_parser("restore-checkpoint")
     restore.add_argument("task_id")
     restore.add_argument("destination")
+    references=sub.add_parser("upload-references")
+    references.add_argument("files",nargs="+")
     resolve_update = sub.add_parser("resolve-update-intent")
     resolve_update.add_argument("target")
     for name in ("publish", "publish-async"):
@@ -773,6 +795,8 @@ def main():
         cmd_checkpoint_package(args)
     elif args.command == "restore-checkpoint":
         cmd_restore_checkpoint(args)
+    elif args.command == "upload-references":
+        cmd_upload_references(args)
     elif args.command == "resolve-update-intent":
         print(json.dumps(authenticated(args, "/v1/dev/packages/update-intents", method="POST",
                                        body={"target": args.target}),
